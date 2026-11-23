@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Karang Bay — open-world crime di teluk karang</title>
+<style>
+  html, body { margin: 0; padding: 0; background: #0b1114; height: 100%; }
+  body { display: flex; align-items: center; justify-content: center; font-family: Georgia, 'Times New Roman', serif; }
+  #wrap { position: relative; width: 1280px; height: 720px; }
+  canvas { display: block; background: #20303a; }
+  .screen {
+    position: absolute; inset: 0; display: none; flex-direction: column;
+    align-items: center; justify-content: center; text-align: center;
+    background: rgba(5, 10, 14, .55); color: #f3ead2; z-index: 5;
+  }
+  .screen h1 {
+    font-size: 84px; letter-spacing: 10px; margin: 0 0 6px;
+    color: #ffd976; text-shadow: 0 4px 0 #a3542c, 0 10px 28px rgba(0,0,0,.7);
+  }
+  .screen h2 { font-size: 44px; letter-spacing: 6px; margin: 0 0 10px; color: #ffd976; }
+  .screen p { max-width: 620px; font-size: 17px; line-height: 1.45; margin: 6px 0; }
+  .screen .controls { font-size: 14px; color: #cfe8ef; line-height: 1.7; }
+  .btn {
+    margin-top: 16px; padding: 12px 38px; font-size: 19px; letter-spacing: 2px;
+    font-family: inherit; font-weight: bold; color: #14202a; background: #ffd976;
+    border: 0; border-radius: 8px; cursor: pointer;
+  }
+  .btn:hover { background: #ffca4d; }
+  .btn.secondary { background: #33505e; color: #f3ead2; }
+  #gameover-screen h2 { color: #d94f3d; }
+  #dialog {
+    position: absolute; left: 50%; transform: translateX(-50%); bottom: 18px;
+    width: 760px; max-width: 92%; display: none; z-index: 4;
+    background: rgba(8, 13, 17, .88); border: 1px solid rgba(255, 217, 118, .5);
+    border-radius: 10px; padding: 12px 18px 10px; color: #f3ead2;
+    font-family: Georgia, 'Times New Roman', serif;
+  }
+  .dlg-who { color: #ffd976; font-weight: bold; font-size: 15px; letter-spacing: 1px; margin-bottom: 4px; }
+  .dlg-text { font-size: 16px; line-height: 1.45; }
+  .dlg-hint { text-align: right; font-size: 12px; color: #9db8c0; margin-top: 4px; }
+</style>
+</head>
+<body>
+<div id="wrap">
+  <canvas id="game" width="1280" height="720"></canvas>
+
+  <div id="dialog"></div>
+
+  <div id="title-screen" class="screen">
+    <h1>KARANG BAY</h1>
+    <p>Raka baru tiba di kota teluk ini dengan $120 dan nama yang sudah kotor.
+       Mara menawarinya pekerjaan, Bara menguasai pasar, dan Inspektur Sinta
+       mengawasi dari udara. Delapan pekerjaan memisahkan Raka dari Karang Bay
+       yang jadi miliknya.</p>
+    <p class="controls">
+      WASD / panah — jalan &amp; menyetir &nbsp;·&nbsp; Shift — lari<br>
+      E — masuk mobil / bicara / pakai toko &nbsp;·&nbsp; Klik — pukul / tembak<br>
+      Spasi — rem tangan &nbsp;·&nbsp; R — reload &nbsp;·&nbsp; M — bisu &nbsp;·&nbsp; Esc — jeda
+    </p>
+    <button id="start-btn" class="btn">MULAI</button>
+    <button id="continue-btn" class="btn secondary">LANJUTKAN SAVE</button>
+  </div>
+
+  <div id="pause-screen" class="screen">
+    <h2>JEDA</h2>
+    <p class="controls">
+      WASD / panah — jalan &amp; menyetir &nbsp;·&nbsp; Shift — lari<br>
+      E — masuk mobil / bicara / pakai toko &nbsp;·&nbsp; Klik — pukul / tembak<br>
+      Spasi — rem tangan &nbsp;·&nbsp; R — reload &nbsp;·&nbsp; M — bisu &nbsp;·&nbsp; Esc — lanjut
+    </p>
+    <p>Progress tersimpan otomatis setiap misi selesai, dan manual di safehouse (E).</p>
+    <button id="resume-btn" class="btn">LANJUT</button>
+    <button id="restart-btn" class="btn secondary">ULANG DARI AWAL</button>
+  </div>
+
+  <div id="gameover-screen" class="screen">
+    <h2>WASTED</h2>
+    <p>Raka terbangun di Klinik Karang Bay. Tagihannya $150 — dan jalanan tidak menunggu.</p>
+  </div>
+</div>
+<script type="module" src="./src/main.js"></script>
+</body>
+</html>
