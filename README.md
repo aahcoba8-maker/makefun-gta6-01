@@ -1,81 +1,52 @@
 # Karang Bay
 
-[![make.fun bounty](https://make.fun/api/competitions/gta6-01/badge.svg)](https://make.fun/bounty/gta6-01)
-[![rank](https://make.fun/api/competitions/gta6-01/rank.svg?user=aahcoba8-maker&repo=makefun-gta6-01)](https://make.fun/bounty/gta6-01)
-[![reward](https://make.fun/api/competitions/gta6-01/reward.svg?user=aahcoba8-maker&repo=makefun-gta6-01)](https://make.fun/bounty/gta6-01)
+[![badge](https://make.fun/api/competitions/gta6-01/entries/aahcoba8-maker/makefun-gta6-01/badge.svg)](https://make.fun/bounty/gta6-01)
+[![rank](https://make.fun/api/competitions/gta6-01/entries/aahcoba8-maker/makefun-gta6-01/rank.svg)](https://make.fun/bounty/gta6-01)
+[![reward](https://make.fun/api/competitions/gta6-01/entries/aahcoba8-maker/makefun-gta6-01/reward.svg)](https://make.fun/bounty/gta6-01)
 
-**Karang Bay** is a complete 2D top-down open-world crime game that runs
-entirely in the browser — one coastal city, five districts, eight missions,
-a full wanted system, and a helicopter that really wants to meet you.
-Built for the [make.fun gta6-01 bounty](https://make.fun/bounty/gta6-01).
+An original 2D top-down open-world crime game built for the
+[make.fun gta6-01 bounty](https://make.fun/bounty/gta6-01). No engine, no
+assets, no build step — plain HTML5 canvas and ES modules.
 
-## Story
+## The game
 
-Raka arrives in the bay city of Karang Bay with $120 and a name that is
-already dirty. Mara offers him work, Bara runs the old market with an iron
-fist, Dodi fixes cars and sprains ankles, and Inspector Sinta watches it
-all from GARUDA-1, the police helicopter. Eight jobs separate Raka from
-owning the bay: a package run, a debt collection, a 75-second dock pickup,
-a port investigation, a five-checkpoint street race, a minimarket robbery,
-an escort across town, and one long night in Bukit Hijau that ends on
-Pantai Karang beach.
+Raka comes home to **Karang Bay**, a harbour city of five districts —
+Pelabuhan (the port), Pasar Lama (the old market), Kota Tua, Bukit Hijau
+and Pantai Karang beach. Bara's crew runs the market, debts are piling up,
+and Inspector Sinta's police are watching every corner. Work jobs for
+Mara, race for Dodi, rob the wrong minimarket, and survive one last night
+under the GARUDA-1 searchlight.
 
-## The city
+## Story missions
 
-- **Pelabuhan** — the port in the east: container stacks, cranes, docks and
-  two ships, KARANG EXPRESS and TELUK 08.
-- **Pasar Lama** — the old market: shops, awnings, the Gun Shop.
-- **Kota Tua** — the old town, home of the minimarket.
-- **Bukit Hijau** — the green hills, quiet by day, decisive by night.
-- **Pantai Karang** — the beach on the sea wall.
-
-## Controls
-
-| Input | Action |
-|---|---|
-| WASD / arrows | Walk / drive |
-| Shift | Run |
-| E | Enter/exit car, talk, use shops, advance dialog |
-| Mouse click / hold | Punch, or aim and fire the pistol |
-| Space | Handbrake (drift) |
-| R | Reload |
-| M | Mute |
-| Esc / P | Pause |
+1. **Paket untuk Mara** — fetch a package from the port, deliver it to Mara ($150)
+2. **Tagihan Pasar Lama** — collect three debts around the market ($200)
+3. **Taksi Gelap** — a 75-second dash to the south dock ($260)
+4. **Suara di Pelabuhan** — check three points around the docks ($220)
+5. **Balapan Karang** — a five-checkpoint race across the city ($300)
+6. **Minimarket** — rob the Kota Tua minimarket, then lose three stars ($350)
+7. **Teman Lama** — escort Dodi from Pay-n-Spray to the clinic ($320)
+8. **Malam di Bukit Hijau** — the finale: night falls, GARUDA-1 rises, run for the beach ($500)
 
 ## Features
 
-- Open world with day/night cycle, rain, street lighting and a live minimap.
-- Driving with an arcade drift model, traffic AI that obeys lanes and red
-  lights, pedestrians who flee from trouble, car theft and collisions.
-- A five-star wanted system: heat is only added when a crime is witnessed,
-  foot officers and Inspector Sinta give chase, patrol cars ram from two
-  stars, and GARUDA-1 joins at three with a searchlight that counts as eyes.
-  Lose them at Dodi's Pay-n-Spray or the safehouse — or get BUSTED.
-- Combat: fists, a purchasable pistol with magazines and reloads, a rival
-  crew holding Pasar Lama and the port, their leader Bara, and explosive
-  barrels that chain.
-- Eight sequential missions with named dialog, timers, a checkpoint race,
-  an escort and a robbery that only pays once the stars are gone.
-- Shops that matter: Gun Shop (pistol $250, ammo $40), Clinic ($30),
-  Pay-n-Spray ($100 and a clean slate), safehouse saving to localStorage.
-- Procedural WebAudio: engine, sirens, gunfire, explosions and a bass loop.
-  No audio files, no assets, no network — everything is drawn and sounded
-  by code.
+- Living traffic on a signalled road grid, pedestrians who flee from crime scenes
+- Witness-gated wanted system: heat only rises when someone sees the crime;
+  five star levels bring foot officers, Inspector Sinta, patrol cars and,
+  from three stars, the GARUDA-1 helicopter with a searchlight
+- Bust meter, Pay-n-Spray escapes, safehouse saves, clinic respawns
+- Pistol combat with reloads, melee, a rival crew holding turf, chain-reacting barrels
+- Procedural WebAudio: engine, siren, shots, explosions and a bass-line loop
+- Full day cycle (24 h in 260 s), rain, live minimap, localStorage save slot
+
+## Controls
+
+- **WASD / arrows** — walk & drive · **E** — enter car / interact
+- **Mouse** — aim, **click** — shoot / punch · **R** — reload
+- **Shift** — run · **Space** — handbrake · **P** — pause · **M** — mute
 
 ## Tech
 
-Vanilla JavaScript ES modules on a single canvas, zero dependencies.
-The world, traffic and missions are seeded and deterministic. `main.ts`
-(the make.fun entrypoint) packages the game folder and screenshots into
-the submission dossier; `serve.ts` runs the game locally:
-
-```sh
-node serve.ts   # http://localhost:8080
-```
-
-Deterministic screenshot staging for judging lives in `shots.json` and
-`game/src/shots.js` (`?shot=chase|street|night|title&seed=1`).
-
-## License
-
-MIT — see `LICENSE`.
+Vanilla JavaScript ES modules (`game/src/`), one canvas, zero dependencies.
+`node serve.ts` serves the game locally on port 8080; `main.ts` is the
+make.fun entrypoint that assembles the submission dossier.

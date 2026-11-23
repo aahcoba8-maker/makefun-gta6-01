@@ -1,73 +1,73 @@
-// input.js — keyboard + mouse state for Karang Bay.
-// updateInput(state) runs first each frame; endFrameInput(input) runs last
+// Keyboard + mouse input for Karang Bay.
+// updateInput(state) runs FIRST each frame; endFrameInput(input) runs LAST
 // and clears the one-frame edge flags.
 export function createInput(canvas) {
   const input = {
     keys: new Set(),
-    mouse: { x: 0, y: 0, wx: 0, wy: 0, down: false },
     moveX: 0, moveY: 0,
     forward: false, back: false, left: false, right: false,
     run: false, handbrake: false,
-    interactPressed: false, attackPressed: false, attackHeld: false,
-    pausePressed: false, mutePressed: false, reloadPressed: false,
+    interactPressed: false, attackPressed: false, pausePressed: false,
+    mutePressed: false, reloadPressed: false,
     paused: false, muted: false,
+    mouse: { x: 640, y: 360, wx: 0, wy: 0, down: false },
+    _e: {},
   };
-  window.addEventListener('keydown', (e) => {
-    const k = e.key.toLowerCase();
-    if (!input.keys.has(k)) {
-      if (k === 'e') input.interactPressed = true;
-      if (k === 'r') input.reloadPressed = true;
-      if (k === ' ') input.attackPressed = true;
-      if (k === 'm') { input.mutePressed = true; input.muted = !input.muted; }
-      if (k === 'escape' || k === 'p') { input.pausePressed = true; input.paused = !input.paused; }
+  const gameKeys = ['Space', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight',
+    'KeyW', 'KeyA', 'KeyS', 'KeyD', 'KeyE', 'KeyR', 'KeyM', 'KeyP',
+    'ShiftLeft', 'ShiftRight'];
+  window.addEventListener('keydown', (ev) => {
+    if (gameKeys.includes(ev.code)) ev.preventDefault();
+    if (!ev.repeat) {
+      if (ev.code === 'KeyE') input._e.interact = true;
+      if (ev.code === 'KeyR') input._e.reload = true;
+      if (ev.code === 'KeyM') input._e.mute = true;
+      if (ev.code === 'KeyP' || ev.code === 'Escape') input._e.pause = true;
     }
-    input.keys.add(k);
-    if (['arrowup', 'arrowdown', 'arrowleft', 'arrowright', ' '].includes(k)) e.preventDefault();
+    input.keys.add(ev.code);
   });
-  window.addEventListener('keyup', (e) => { input.keys.delete(e.key.toLowerCase()); });
+  window.addEventListener('keyup', (ev) => input.keys.delete(ev.code));
   window.addEventListener('blur', () => { input.keys.clear(); input.mouse.down = false; });
-  if (canvas) {
-    canvas.addEventListener('mousemove', (e) => {
-      const r = canvas.getBoundingClientRect();
-      input.mouse.x = (e.clientX - r.left) * (canvas.width / r.width);
-      input.mouse.y = (e.clientY - r.top) * (canvas.height / r.height);
-    });
-    canvas.addEventListener('mousedown', (e) => {
-      if (e.button === 0) { if (!input.mouse.down) input.attackPressed = true; input.mouse.down = true; }
-    });
-    window.addEventListener('mouseup', (e) => { if (e.button === 0) input.mouse.down = false; });
-    canvas.addEventListener('contextmenu', (e) => e.preventDefault());
-  }
+  canvas.addEventListener('mousemove', (ev) => {
+    const r = canvas.getBoundingClientRect();
+    input.mouse.x = (ev.clientX - r.left) * (canvas.width / r.width);
+    input.mouse.y = (ev.clientY - r.top) * (canvas.height / r.height);
+  });
+  canvas.addEventListener('mousedown', (ev) => {
+    if (ev.button === 0) { input.mouse.down = true; input._e.attack = true; }
+  });
+  window.addEventListener('mouseup', (ev) => { if (ev.button === 0) input.mouse.down = false; });
+  canvas.addEventListener('contextmenu', (ev) => ev.preventDefault());
   return input;
-}
-
-export function attachInput(state, canvas) {
-  state.input = createInput(canvas);
-  return state.input;
 }
 
 export function updateInput(state) {
   const input = state.input;
-  if (!input) return;
   const k = input.keys;
-  input.left = k.has('a') || k.has('arrowleft');
-  input.right = k.has('d') || k.has('arrowright');
-  input.forward = k.has('w') || k.has('arrowup');
-  input.back = k.has('s') || k.has('arrowdown');
+  input.forward = k.has('KeyW') || k.has('ArrowUp');
+  input.back = k.has('KeyS') || k.has('ArrowDown');
+  input.left = k.has('KeyA') || k.has('ArrowLeft');
+  input.right = k.has('KeyD') || k.has('ArrowRight');
   input.moveX = (input.right ? 1 : 0) - (input.left ? 1 : 0);
   input.moveY = (input.back ? 1 : 0) - (input.forward ? 1 : 0);
-  input.run = k.has('shift');
-  input.handbrake = k.has(' ');
-  input.attackHeld = input.mouse.down || k.has(' ');
-  input.mouse.wx = input.mouse.x + (state.camera ? state.camera.x : 0);
-  input.mouse.wy = input.mouse.y + (state.camera ? state.camera.y : 0);
+  input.run = k.has('ShiftLeft') || k.has('ShiftRight');
+  input.handbrake = k.has('Space');
+  input.interactPressed = !!input._e.interact;
+  input.attackPressed = !!input._e.attack;
+  input.reloadPressed = !!input._e.reload;
+  input.pausePressed = !!input._e.pause;
+  input.mutePressed = !!input._e.mute;
+  if (input.pausePressed) input.paused = !input.paused;
+  if (input.mutePressed) input.muted = !input.muted;
+  input.mouse.wx = input.mouse.x + state.camera.x;
+  input.mouse.wy = input.mouse.y + state.camera.y;
 }
 
 export function endFrameInput(input) {
-  if (!input) return;
+  input._e = {};
   input.interactPressed = false;
   input.attackPressed = false;
+  input.reloadPressed = false;
   input.pausePressed = false;
   input.mutePressed = false;
-  input.reloadPressed = false;
 }

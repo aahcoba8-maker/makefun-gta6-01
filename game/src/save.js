@@ -1,51 +1,50 @@
-// save.js — one localStorage slot for Karang Bay.
+// One-slot localStorage save for Karang Bay.
 const KEY = 'karangbay-save-v1';
 
 export function saveGame(state) {
   try {
     const p = state.player;
     const data = {
-      x: Math.round(p.x), y: Math.round(p.y),
-      hp: Math.round(p.hp), money: p.money,
-      hasGun: !!p.hasGun, ammo: p.ammo,
-      heat: Math.round(state.wanted ? state.wanted.heat : 0),
-      missionIndex: state.missionIndex || 0,
-      dayTime: state.dayTime, seed: state.seed,
-      carColor: p.vehicle ? p.vehicle.color : null,
+      x: p.x, y: p.y, hp: p.hp, money: p.money,
+      hasPistol: p.hasPistol, ammo: p.ammo, mag: p.mag,
+      heat: state.wanted.heat,
+      missionIndex: state.mission.index,
+      timeOfDay: state.timeOfDay,
+      seed: state.seed,
     };
     localStorage.setItem(KEY, JSON.stringify(data));
     return true;
-  } catch (e) { return false; }
+  } catch { return false; }
 }
 
 export function loadSaveData() {
   try {
     const raw = localStorage.getItem(KEY);
     return raw ? JSON.parse(raw) : null;
-  } catch (e) { return null; }
+  } catch { return null; }
 }
 
 export function hasSave() { return !!loadSaveData(); }
 
 export function clearSave() {
-  try { localStorage.removeItem(KEY); } catch (e) { /* storage unavailable */ }
+  try { localStorage.removeItem(KEY); } catch { /* storage unavailable */ }
 }
 
 export function applySave(state, data) {
   if (!data) return false;
   const p = state.player;
-  if (p.vehicle) { p.vehicle.driver = null; p.vehicle = null; }
-  p.x = data.x; p.y = data.y; p.vx = 0; p.vy = 0;
-  p.hp = Math.min(p.maxHp, data.hp || 100);
-  p.money = data.money || 0;
-  p.hasGun = !!data.hasGun;
-  p.ammo = data.ammo || 0;
-  p.mag = 12; p.reloading = 0; p.dead = false;
-  if (state.wanted) {
-    state.wanted.heat = data.heat || 0;
-    state.wanted.level = 0;
-    state.wanted.contact = false;
-  }
-  state.dayTime = typeof data.dayTime === 'number' ? data.dayTime : 10;
+  if (Number.isFinite(data.x)) p.x = data.x;
+  if (Number.isFinite(data.y)) p.y = data.y;
+  if (Number.isFinite(data.hp)) p.hp = data.hp;
+  if (Number.isFinite(data.money)) p.money = data.money;
+  p.hasPistol = !!data.hasPistol;
+  p.ammo = data.ammo ?? 0;
+  p.mag = data.mag ?? 0;
+  state.wanted.heat = data.heat ?? 0;
+  state.wanted.bust = 0;
+  state.mission.index = data.missionIndex ?? 0;
+  state.mission.step = 0;
+  state.mission.data = {};
+  if (Number.isFinite(data.timeOfDay)) state.timeOfDay = data.timeOfDay;
   return true;
 }

@@ -1,198 +1,200 @@
-// traffic.js — AI cars on the road grid + sidewalk pedestrians.
-// damagePed is the single ped-damage / crime-reporting entry point.
-import { ROAD_X, ROAD_Y, TILE } from './config.js';
-import { rng } from './random.js';
+// Ambient traffic and pedestrians for Karang Bay.
+// Cars follow right-hand lanes on the ROAD_X / ROAD_Y grid, honour traffic
+// lights (6 s phases) and stop for vehicles and peds ahead. Peds stroll the
+// sidewalks and flee fresh alerts. damagePed is the single entry point for
+// hurting any pedestrian-shaped body (peds, crew, bystanders).
+import { ROAD_X, ROAD_Y, TILE, WORLD } from './config.js';
 import { reportCrime } from './police.js';
 
-const CAR_COLORS = ['#b85145', '#4a7fa5', '#c9a227', '#5d8a66', '#8a6fae', '#d07b3f', '#7d8a96', '#a34a6e'];
-const PED_COLORS = ['#dfbf9b', '#c98d64', '#8a5a3b', '#e8c39a', '#6e4630'];
-const cx = (i) => ROAD_X[i] * TILE + 17;
-const cy = (j) => ROAD_Y[j] * TILE + 17;
+const CAR_COLORS = ['#b85145', '#4a7fb5', '#c9a227', '#5f9e6e', '#8a6bb8', '#c7c7c7', '#37474f'];
+const PED_COLORS = ['#dfbf9b', '#c98d5f', '#8a5a3b', '#e8c39e', '#a06a42'];
 
-export function lightGreen(axis, i, j, time) {
-  const phase = (Math.floor(time / 6) + i + j) % 2 === 0;
-  return axis === 'v' ? phase : !phase;
-}
-
-export function damagePed(state, ped, dmg, opts = {}) {
-  if (!ped || ped.dead) return;
-  ped.hp -= dmg;
-  if (typeof opts.angle === 'number') {
-    ped.x += Math.cos(opts.angle) * 9;
-    ped.y += Math.sin(opts.angle) * 9;
-  }
-  if (ped.hp <= 0) {
-    ped.dead = true; ped.corpseT = 6; ped.color = '#5a4a42';
-    if (opts.byPlayer) {
-      const kind = ped.kind === 'officer' || ped.kind === 'sinta' ? 'hitPolice'
-        : opts.vehicle ? 'runover' : 'assault';
-      reportCrime(state, kind, ped.x, ped.y);
-    }
-  } else if (opts.byPlayer) {
-    reportCrime(state, ped.kind === 'officer' || ped.kind === 'sinta' ? 'hitPolice' : 'assault', ped.x, ped.y);
-    ped.fleeT = Math.max(ped.fleeT || 0, 1.6);
-  }
-}
-
-function spawnCar(state, r) {
-  const ci = r.int(0, ROAD_X.length - 1);
-  const cj = r.int(0, ROAD_Y.length - 1);
-  const axis = r.next() < 0.5 ? 'v' : 'h';
-  const dir = r.next() < 0.5 ? 1 : -1;
-  const car = {
-    x: cx(ci), y: cy(cj), angle: axis === 'v' ? (dir > 0 ? Math.PI / 2 : -Math.PI / 2) : (dir > 0 ? 0 : Math.PI),
-    w: 34, h: 19, color: r.pick(CAR_COLORS), police: false, kind: 'car',
-    speed: 0, vx: 0, vy: 0, hp: 140, driver: null, wrecked: false,
-    axis, dir, ci, cj, ni: ci, nj: cj, seed: r.int(1, 99999),
+export function makeCar(x, y, angle, color, opts = {}) {
+  return {
+    x, y, angle, w: 34, h: 19, color,
+    police: !!opts.police, ai: !!opts.ai,
+    speed: 0, hp: opts.hp ?? 100, wrecked: false,
+    driver: opts.driver ?? null,
+    axis: opts.axis || 'v', dir: opts.dir || 1,
+    cruise: opts.cruise ?? 100, turnCd: 0,
   };
-  pickNext(car, r);
-  // Start partway along the first leg so the grid is not stacked on crossings.
-  const t = r.next() * 0.7;
-  car.x += (lanePoint(car).x - car.x) * t;
-  car.y += (lanePoint(car).y - car.y) * t;
-  return car;
 }
 
-function lanePoint(car) {
-  if (car.ni !== car.ci) { // horizontal travel
-    const off = car.ni > car.ci ? 8 : -8;
-    return { x: cx(car.ni), y: cy(car.cj) + off };
-  }
-  const off = car.nj > car.cj ? -8 : 8;
-  return { x: cx(car.ci) + off, y: cy(car.nj) };
-}
-
-function pickNext(car, r) {
-  const opts = [];
-  if (car.ci > 0) opts.push({ ni: car.ci - 1, nj: car.cj });
-  if (car.ci < ROAD_X.length - 1) opts.push({ ni: car.ci + 1, nj: car.cj });
-  if (car.cj > 0) opts.push({ ni: car.ci, nj: car.cj - 1 });
-  if (car.cj < ROAD_Y.length - 1) opts.push({ ni: car.ci, nj: car.cj + 1 });
-  // Prefer going straight, never U-turn unless it is the only way.
-  const back = { ni: car.ci - Math.sign(car.ni - car.ci) || car.ci, nj: car.cj - Math.sign(car.nj - car.cj) || car.cj };
-  let pool = opts.filter(o => !(o.ni === back.ni && o.nj === back.nj && (car.ni !== car.ci || car.nj !== car.cj)));
-  if (!pool.length) pool = opts;
-  const straight = pool.find(o => (o.ni - car.ci) === Math.sign(car.ni - car.ci) && (o.nj - car.cj) === Math.sign(car.nj - car.cj));
-  const pick = straight && r.next() < 0.55 ? straight : r.pick(pool);
-  car.ni = pick.ni; car.nj = pick.nj;
-  car.axis = car.ni !== car.ci ? 'h' : 'v';
-  car.dir = car.axis === 'h' ? Math.sign(car.ni - car.ci) : Math.sign(car.nj - car.cj);
-}
-
-export function createTraffic(state) {
-  const r = rng(state.seed * 7 + 3);
-  state.vehicles = state.vehicles || [];
-  state.peds = state.peds || [];
-  for (let i = 0; i < 14; i++) state.vehicles.push(spawnCar(state, r));
-  for (let i = 0; i < 24; i++) {
-    const vertical = r.next() < 0.5;
+export function initTraffic(state) {
+  const r = state.rand;
+  state.cars = [];
+  state.peds = [];
+  for (let i = 0; i < 14; i++) {
+    const vertical = r.next() > 0.45;
     const ci = r.int(0, ROAD_X.length - 1);
-    const cj = r.int(0, ROAD_Y.length - 1);
-    const side = r.next() < 0.5 ? -26 : 26;
-    const along = r.next();
+    const ri = r.int(0, ROAD_Y.length - 1);
+    const dir = r.next() > 0.5 ? 1 : -1;
+    let car;
+    if (vertical) {
+      const x = ROAD_X[ci] * TILE + 17 + (dir > 0 ? 8 : -8);
+      const y = ROAD_Y[ri] * TILE + r.int(-30, 30);
+      car = makeCar(x, y, dir > 0 ? Math.PI / 2 : -Math.PI / 2, CAR_COLORS[i % CAR_COLORS.length], { ai: true, axis: 'v', dir });
+    } else {
+      const y = ROAD_Y[ri] * TILE + 17 + (dir > 0 ? -8 : 8);
+      const x = ROAD_X[ci] * TILE + r.int(-30, 30);
+      car = makeCar(x, y, dir > 0 ? 0 : Math.PI, CAR_COLORS[i % CAR_COLORS.length], { ai: true, axis: 'h', dir });
+    }
+    car.cruise = 85 + r.next() * 45;
+    car.driver = { role: 'driver' };
+    state.cars.push(car);
+  }
+  for (let i = 0; i < 24; i++) {
+    const vertical = r.next() > 0.5;
+    const ci = r.int(0, ROAD_X.length - 1);
+    const ri = r.int(0, ROAD_Y.length - 1);
+    const side = r.next() > 0.5 ? -13 : 47;
     const ped = {
-      x: 0, y: 0, r: 6, color: r.pick(PED_COLORS), hp: 30, dead: false,
-      kind: 'ped', fleeT: 0, corpseT: 0, speed: 40 + r.next() * 14,
-      vertical, ci, cj, side, tx: 0, ty: 0, seed: r.int(1, 99999),
+      x: 0, y: 0, r: 6, color: PED_COLORS[i % PED_COLORS.length],
+      hp: 30, dead: false, deadT: 0, role: 'ped',
+      axis: vertical ? 'v' : 'h', dir: r.next() > 0.5 ? 1 : -1,
+      speed: 26 + r.next() * 20, fleeT: 0, fleeX: 0, fleeY: 0,
     };
-    if (vertical) { ped.x = cx(ci) + side; ped.y = cy(0) + along * (cy(ROAD_Y.length - 1) - cy(0)); }
-    else { ped.x = cx(0) + along * (cx(ROAD_X.length - 1) - cx(0)); ped.y = cy(cj) + side; }
-    newPedTarget(state, ped, r);
+    if (vertical) {
+      ped.x = ROAD_X[ci] * TILE + side;
+      ped.y = r.int(40, WORLD.height - 40);
+    } else {
+      ped.y = ROAD_Y[ri] * TILE + side;
+      ped.x = r.int(40, state.world.seaX - 60);
+    }
     state.peds.push(ped);
   }
-  return state;
 }
 
-function newPedTarget(state, ped, r) {
-  const rr = r || rng(ped.seed + Math.floor(state.time * 10) + 1);
-  if (ped.vertical) { ped.tx = ped.x; ped.ty = Math.max(30, Math.min(state.world.height - 30, ped.y + (rr.next() * 560 - 280))); }
-  else { ped.ty = ped.y; ped.tx = Math.max(30, Math.min(state.world.seaX - 40, ped.x + (rr.next() * 560 - 280))); }
+function lightRed(state, car, aheadX, aheadY) {
+  const phase = Math.floor(state.time / 6) % 2; // 0: vertical flows, 1: horizontal
+  const mine = car.axis === 'v' ? 0 : 1;
+  if (phase === mine) return false;
+  for (const cx of ROAD_X) {
+    for (const cy of ROAD_Y) {
+      if (Math.hypot(cx * TILE + 17 - aheadX, cy * TILE + 17 - aheadY) < 24) return true;
+    }
+  }
+  return false;
 }
 
-function updateCar(state, car, dt) {
-  if (car.driver === 'player' || car.kind === 'patrol') return; // player/police drive these
-  if (car.wrecked || car.hp <= 0) {
-    car.wrecked = true; car.speed = 0;
-    if (car.driver && car.driver !== 'player') {
-      const d = car.driver;
-      d.x = car.x + 20; d.y = car.y + 12; d.fleeT = 2.4; d.dead = false;
-      if (!state.peds.includes(d)) state.peds.push(d);
-      car.driver = null;
-    }
-    return;
-  }
-  const target = lanePoint(car);
-  const dx = target.x - car.x, dy = target.y - car.y;
-  const dist = Math.hypot(dx, dy);
-  const r = rng(car.seed + Math.floor(state.time));
-  if (dist < 9) {
-    car.ci = car.ni; car.cj = car.nj;
-    pickNext(car, r);
-    return;
-  }
-  const hx = dx / dist, hy = dy / dist;
-  let want = 88;
-  // Red light at the target crossing.
-  if (!lightGreen(car.axis, car.ni, car.nj, state.time) && dist < 52) want = 0;
-  // Vehicle ahead in my lane.
-  for (const o of state.vehicles) {
-    if (o === car) continue;
-    const ox = o.x - car.x, oy = o.y - car.y;
-    const od = Math.hypot(ox, oy);
-    if (od < 52 && od > 0.01 && (ox * hx + oy * hy) / od > 0.72) { want = 0; break; }
-  }
-  // Pedestrian in the road ahead.
-  if (want > 0) {
-    for (const p of state.peds) {
-      if (p.dead) continue;
-      const ox = p.x - car.x, oy = p.y - car.y;
-      const od = Math.hypot(ox, oy);
-      if (od < 36 && od > 0.01 && (ox * hx + oy * hy) / od > 0.6) { want = 0; break; }
+function maybeTurn(state, car) {
+  if (car.turnCd > 0) return;
+  for (const cx of ROAD_X) {
+    for (const cy of ROAD_Y) {
+      const ix = cx * TILE + 17;
+      const iy = cy * TILE + 17;
+      if (Math.hypot(ix - car.x, iy - car.y) < 9) {
+        car.turnCd = 2.5;
+        if (state.rand.next() < 0.45) {
+          const dir = state.rand.next() > 0.5 ? 1 : -1;
+          if (car.axis === 'v') {
+            car.axis = 'h'; car.dir = dir;
+            car.y = iy + (dir > 0 ? -8 : 8);
+            car.angle = dir > 0 ? 0 : Math.PI;
+          } else {
+            car.axis = 'v'; car.dir = dir;
+            car.x = ix + (dir > 0 ? 8 : -8);
+            car.angle = dir > 0 ? Math.PI / 2 : -Math.PI / 2;
+          }
+        }
+        return;
+      }
     }
   }
-  if (state.player && !state.player.vehicle && state.player.hp > 0) {
-    const ox = state.player.x - car.x, oy = state.player.y - car.y;
-    const od = Math.hypot(ox, oy);
-    if (od < 36 && od > 0.01 && (ox * hx + oy * hy) / od > 0.6) want = 0;
-  }
-  car.speed += Math.max(-190 * dt, Math.min(120 * dt, want - car.speed));
-  if (car.speed < 0.4 && want === 0) car.speed = 0;
-  car.x += hx * car.speed * dt;
-  car.y += hy * car.speed * dt;
-  car.vx = hx * car.speed; car.vy = hy * car.speed;
-  if (car.speed > 2) car.angle = Math.atan2(hy, hx);
 }
 
-function updatePed(state, ped, dt) {
-  if (ped.dead) { ped.corpseT -= dt; return; }
-  // Flee fresh alerts nearby.
-  let flee = null;
-  for (const a of state.alerts) {
-    if (state.time - a.t < 4 && Math.hypot(ped.x - a.x, ped.y - a.y) < 150) { flee = a; break; }
+function turnAround(state, car) {
+  car.dir *= -1;
+  if (car.axis === 'v') {
+    car.angle = car.dir > 0 ? Math.PI / 2 : -Math.PI / 2;
+    car.x += car.dir > 0 ? 0 : 0;
+    car.y = Math.max(34, Math.min(state.world.height - 34, car.y));
+    car.x = Math.max(24, Math.min(state.world.seaX - 30, car.x));
+  } else {
+    car.angle = car.dir > 0 ? 0 : Math.PI;
+    car.x = Math.max(34, Math.min(state.world.seaX - 40, car.x));
+    car.y = Math.max(24, Math.min(state.world.height - 34, car.y));
   }
-  if (flee) ped.fleeT = Math.max(ped.fleeT || 0, 0.4);
-  if (ped.fleeT > 0) {
-    ped.fleeT -= dt;
-    const src = flee || state.lastAlertPos;
-    if (src) {
-      const dx = ped.x - src.x, dy = ped.y - src.y;
-      const d = Math.hypot(dx, dy) || 1;
-      ped.x += (dx / d) * 132 * dt;
-      ped.y += (dy / d) * 132 * dt;
-      ped.x = Math.max(8, Math.min(state.world.seaX - 20, ped.x));
-      ped.y = Math.max(8, Math.min(state.world.height - 8, ped.y));
-    }
-    return;
-  }
-  const dx = ped.tx - ped.x, dy = ped.ty - ped.y;
-  const d = Math.hypot(dx, dy);
-  if (d < 7) { newPedTarget(state, ped); return; }
-  ped.x += (dx / d) * ped.speed * dt;
-  ped.y += (dy / d) * ped.speed * dt;
+  car.turnCd = 1.5;
 }
 
 export function updateTraffic(state, dt) {
-  for (const car of state.vehicles) updateCar(state, car, dt);
-  for (const ped of state.peds) updatePed(state, ped, dt);
-  state.peds = state.peds.filter(p => !(p.dead && p.corpseT <= 0));
+  const time = state.time;
+  for (const car of state.cars) {
+    if (!car.ai) continue;
+    car.turnCd = Math.max(0, car.turnCd - dt);
+    if (car.wrecked) { car.speed = 0; continue; }
+    const aheadX = car.x + Math.cos(car.angle) * 30;
+    const aheadY = car.y + Math.sin(car.angle) * 30;
+    let stop = lightRed(state, car, aheadX, aheadY);
+    if (!stop) {
+      for (const other of state.cars) {
+        if (other !== car && Math.hypot(other.x - aheadX, other.y - aheadY) < 24) { stop = true; break; }
+      }
+    }
+    if (!stop && state.player.vehicle &&
+        Math.hypot(state.player.vehicle.x - aheadX, state.player.vehicle.y - aheadY) < 26) stop = true;
+    if (!stop && !state.player.vehicle &&
+        Math.hypot(state.player.x - aheadX, state.player.y - aheadY) < 20) stop = true;
+    if (!stop) {
+      for (const ped of state.peds) {
+        if (!ped.dead && Math.hypot(ped.x - aheadX, ped.y - aheadY) < 20) { stop = true; break; }
+      }
+    }
+    const target = stop ? 0 : car.cruise;
+    car.speed += (target - car.speed) * Math.min(1, dt * 3);
+    if (Math.abs(car.speed) > 2) {
+      car.x += Math.cos(car.angle) * car.speed * dt;
+      car.y += Math.sin(car.angle) * car.speed * dt;
+      maybeTurn(state, car);
+    }
+    if (car.x < 26 || car.x > state.world.seaX - 24 || car.y < 26 || car.y > state.world.height - 26) {
+      turnAround(state, car);
+    }
+  }
+  for (const ped of state.peds) {
+    if (ped.dead || ped.role !== 'ped') continue;
+    if (ped.fleeT > 0) {
+      ped.fleeT -= dt;
+      ped.x += ped.fleeX * 95 * dt;
+      ped.y += ped.fleeY * 95 * dt;
+    } else {
+      for (const a of state.alerts) {
+        if (time - a.t < 4 && Math.hypot(a.x - ped.x, a.y - ped.y) < 150) {
+          const d = Math.max(1, Math.hypot(ped.x - a.x, ped.y - a.y));
+          ped.fleeX = (ped.x - a.x) / d;
+          ped.fleeY = (ped.y - a.y) / d;
+          ped.fleeT = 2.4;
+          break;
+        }
+      }
+      if (ped.fleeT <= 0) {
+        if (ped.axis === 'v') {
+          ped.y += ped.dir * ped.speed * dt;
+          if (ped.y < 30 || ped.y > state.world.height - 30) ped.dir *= -1;
+        } else {
+          ped.x += ped.dir * ped.speed * dt;
+          if (ped.x < 30 || ped.x > state.world.seaX - 46) ped.dir *= -1;
+        }
+      }
+    }
+    ped.x = Math.max(8, Math.min(state.world.seaX - 8, ped.x));
+    ped.y = Math.max(8, Math.min(state.world.height - 8, ped.y));
+  }
+}
+
+// The one place pedestrians take damage. opts.byPlayer reports the crime;
+// opts.kind overrides the crime kind; opts.knock = {x, y} shove in px.
+export function damagePed(state, ped, dmg, opts = {}) {
+  if (ped.dead) return;
+  ped.hp -= dmg;
+  if (opts.knock) { ped.x += opts.knock.x; ped.y += opts.knock.y; }
+  if (opts.byPlayer) {
+    reportCrime(state, opts.kind || (ped.hp <= 0 ? 'murder' : 'assault'), ped.x, ped.y);
+  }
+  if (ped.hp <= 0) {
+    ped.dead = true;
+    ped.deadT = state.time;
+    state.alerts.push({ x: ped.x, y: ped.y, t: state.time, kind: 'panic' });
+  }
 }

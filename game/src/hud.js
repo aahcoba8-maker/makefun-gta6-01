@@ -1,139 +1,173 @@
-// hud.js — canvas HUD (health, money, stars, clock, objective, notices,
-// live minimap) + dialog sync to the #dialog DOM element.
-import { ROAD_X, ROAD_Y, TILE } from './config.js';
-
-const PHASE_LABEL = { day: 'SIANG', dusk: 'SENJA', night: 'MALAM', dawn: 'PAGI' };
-
-function panel(c, x, y, w, h, alpha = 0.55) {
-  c.fillStyle = `rgba(10,16,20,${alpha})`;
-  if (c.roundRect) { c.beginPath(); c.roundRect(x, y, w, h, 8); c.fill(); }
-  else c.fillRect(x, y, w, h);
-}
-
-function clockText(dayTime) {
-  const h = Math.floor(dayTime) % 24;
-  const m = Math.floor((dayTime - Math.floor(dayTime)) * 60);
-  return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
-}
-
-function drawMinimap(c, state) {
-  const W = 176, H = 124, x0 = c.canvas.width - W - 10, y0 = c.canvas.height - H - 10;
-  const sx = W / state.world.width, sy = H / state.world.height;
-  panel(c, x0 - 4, y0 - 4, W + 8, H + 8, 0.62);
-  c.fillStyle = '#1d6b83';
-  c.fillRect(x0 + state.world.seaX * sx, y0, (state.world.width - state.world.seaX) * sx, H);
-  c.strokeStyle = 'rgba(220,225,220,.35)'; c.lineWidth = 1;
-  for (const col of ROAD_X) { c.beginPath(); c.moveTo(x0 + (col * TILE + 17) * sx, y0); c.lineTo(x0 + (col * TILE + 17) * sx, y0 + H); c.stroke(); }
-  for (const row of ROAD_Y) { c.beginPath(); c.moveTo(x0, y0 + (row * TILE + 17) * sy); c.lineTo(x0 + state.world.seaX * sx, y0 + (row * TILE + 17) * sy); c.stroke(); }
-  const dot = (x, y, color, r = 2.4) => { c.fillStyle = color; c.beginPath(); c.arc(x0 + x * sx, y0 + y * sy, r, 0, Math.PI * 2); c.fill(); };
-  for (const s of state.world.stores) dot(s.x, s.y, s.type === 'gun' ? '#ef765b' : s.type === 'spray' ? '#ffcc58' : s.type === 'clinic' ? '#76d6c1' : '#ffffff', 2);
-  for (const v of state.vehicles) if (v.police) dot(v.x, v.y, Math.sin(state.time * 6) > 0 ? '#318df0' : '#e94651', 2.2);
-  for (const o of state.officers) if (!o.dead) dot(o.x, o.y, '#e94651', 2);
-  for (const e of state.enemies) if (!e.dead) dot(e.x, e.y, '#b03040', 1.8);
-  if (state.marker) {
-    const pulse = 3 + Math.sin(state.time * 5) * 1.1;
-    dot(state.marker.x, state.marker.y, '#ffd94d', pulse);
-  }
-  const p = state.player;
-  dot(p.x, p.y, '#ffffff', 3);
-  c.strokeStyle = '#ffffff';
-  c.beginPath();
-  c.moveTo(x0 + p.x * sx, y0 + p.y * sy);
-  c.lineTo(x0 + (p.x + Math.cos(p.face) * 26) * sx, y0 + (p.y + Math.sin(p.face) * 26) * sy);
-  c.stroke();
-}
-
-export function drawHUD(c, state) {
-  const p = state.player;
-  if (!p) return;
-  const W = c.canvas.width;
-  // Top-left: identity, health, money, weapon.
-  panel(c, 12, 12, 208, 74);
-  c.fillStyle = '#f2e9d8'; c.font = 'bold 13px sans-serif';
-  c.fillText('RAKA', 22, 31);
-  c.fillStyle = '#3a454b'; c.fillRect(22, 38, 150, 11);
-  c.fillStyle = p.hp > 30 ? '#69c24a' : '#e94651';
-  c.fillRect(22, 38, 150 * Math.max(0, p.hp / p.maxHp), 11);
-  c.fillStyle = '#ffd94d'; c.font = 'bold 15px sans-serif';
-  c.fillText(`$${p.money}`, 22, 68);
-  c.fillStyle = '#dfe7ea'; c.font = '11px sans-serif';
-  const weapon = p.vehicle ? 'MENYETIR' : p.hasGun ? `PISTOL ${p.mag}/${p.ammo}${p.reloading > 0 ? ' — RELOAD' : ''}` : 'TANGAN KOSONG';
-  c.fillText(weapon, 92, 68);
-  // Top-right: stars + clock.
-  const lvl = state.wanted ? state.wanted.level : 0;
-  c.font = '19px sans-serif';
-  for (let i = 0; i < 5; i++) {
-    c.fillStyle = i < lvl ? '#ffd94d' : 'rgba(200,205,210,.35)';
-    c.fillText('★', W - 132 + i * 24, 34);
-  }
-  c.fillStyle = '#f2e9d8'; c.font = 'bold 14px sans-serif';
-  c.textAlign = 'right';
-  c.fillText(`${clockText(state.dayTime)} ${PHASE_LABEL[state.dayPhase] || ''}`, W - 16, 58);
-  c.textAlign = 'left';
-  // Top-center: objective.
-  if (state.objective && state.mode === 'play') {
-    c.font = 'bold 13px sans-serif';
-    const tw = Math.min(W - 480, c.measureText(state.objective).width + 28);
-    panel(c, (W - tw) / 2, 12, tw, 30, 0.6);
-    c.fillStyle = '#ffe9a8';
-    c.textAlign = 'center';
-    c.fillText(state.objective, W / 2, 32, tw - 16);
-    c.textAlign = 'left';
-  }
-  // Speed.
-  if (p.vehicle) {
-    c.fillStyle = '#f2e9d8'; c.font = 'bold 17px sans-serif';
-    c.fillText(`${p.speedKmh} km/h`, 22, c.canvas.height - 18);
-  }
-  // Bust meter.
-  if (state.wanted && state.wanted.bust > 0.03) {
-    panel(c, W / 2 - 90, 120, 180, 22, 0.65);
-    c.fillStyle = '#e94651'; c.fillRect(W / 2 - 84, 126, 168 * Math.min(1, state.wanted.bust), 10);
-    c.fillStyle = '#fff'; c.font = 'bold 10px sans-serif'; c.textAlign = 'center';
-    c.fillText('DITANGKAP…', W / 2, 118);
-    c.textAlign = 'left';
-  }
-  // Notices.
-  c.font = 'bold 13px sans-serif'; c.textAlign = 'center';
-  (state.notices || []).forEach((n, i) => {
-    const a = n.t > n.life - 0.7 ? Math.max(0, (n.life - n.t) / 0.7) : 1;
-    c.fillStyle = `rgba(255,233,168,${a})`;
-    c.fillText(n.text, W / 2, c.canvas.height - 168 - i * 19);
-  });
-  c.textAlign = 'left';
-  drawMinimap(c, state);
-  // WASTED / pause overlays.
-  if (p.dead) {
-    c.fillStyle = 'rgba(20,4,6,.45)'; c.fillRect(0, 0, W, c.canvas.height);
-    c.fillStyle = '#e94651'; c.font = 'bold 64px sans-serif'; c.textAlign = 'center';
-    c.fillText('WASTED', W / 2, c.canvas.height / 2);
-    c.textAlign = 'left';
-  } else if (state.mode === 'pause') {
-    c.fillStyle = 'rgba(6,10,14,.5)'; c.fillRect(0, 0, W, c.canvas.height);
-    c.fillStyle = '#f2e9d8'; c.font = 'bold 40px sans-serif'; c.textAlign = 'center';
-    c.fillText('JEDA', W / 2, c.canvas.height / 2);
-    c.textAlign = 'left';
-  }
-}
+// Canvas HUD for Karang Bay: health, money, wanted stars, clock, speed,
+// objective line, notices, a LIVE minimap, and the #dialog DOM element
+// (only touched when the dialog content actually changes).
+import { ROAD_X, ROAD_Y, TILE, WORLD } from './config.js';
 
 let lastDialogKey = '__none__';
-export function syncDialog(state) {
+
+function syncDialog(state) {
   const el = document.getElementById('dialog');
   if (!el) return;
   const d = state.dialog;
-  const key = d ? `${d.name}|${d.text}` : '';
+  const key = d ? `${d.who}|${d.text}` : '';
   if (key === lastDialogKey) return;
   lastDialogKey = key;
-  if (!d) { el.style.display = 'none'; el.innerHTML = ''; return; }
+  if (!d) {
+    el.style.display = 'none';
+    el.textContent = '';
+    return;
+  }
   el.style.display = 'block';
-  el.innerHTML = '';
-  const name = document.createElement('div');
-  name.className = 'dialog-name';
-  name.textContent = d.name;
-  const text = document.createElement('div');
-  text.textContent = d.text;
-  const hint = document.createElement('div');
-  hint.className = 'dialog-hint';
-  hint.textContent = 'Tekan E untuk lanjut';
-  el.append(name, text, hint);
+  el.textContent = '';
+  const who = document.createElement('b');
+  who.textContent = `${d.who}: `;
+  el.appendChild(who);
+  el.appendChild(document.createTextNode(d.text));
+}
+
+function phaseLabel(phase) {
+  if (phase === 'day') return 'Siang';
+  if (phase === 'dusk') return 'Senja';
+  if (phase === 'dawn') return 'Fajar';
+  return 'Malam';
+}
+
+function drawMinimap(ctx, state) {
+  const W = 190;
+  const H = 122;
+  const x0 = 16;
+  const y0 = ctx.canvas.height - H - 16;
+  const sx = W / state.world.width;
+  const sy = H / state.world.height;
+  ctx.fillStyle = 'rgba(10,16,20,.78)';
+  ctx.fillRect(x0, y0, W, H);
+  ctx.strokeStyle = 'rgba(255,255,255,.35)';
+  ctx.strokeRect(x0, y0, W, H);
+  ctx.fillStyle = '#1d6b83';
+  ctx.fillRect(x0 + state.world.seaX * sx, y0, (state.world.width - state.world.seaX) * sx, H);
+  ctx.strokeStyle = 'rgba(229,198,109,.5)';
+  ctx.lineWidth = 1;
+  for (const cx of ROAD_X) {
+    ctx.beginPath();
+    ctx.moveTo(x0 + (cx * TILE + 17) * sx, y0);
+    ctx.lineTo(x0 + (cx * TILE + 17) * sx, y0 + H);
+    ctx.stroke();
+  }
+  for (const cy of ROAD_Y) {
+    ctx.beginPath();
+    ctx.moveTo(x0, y0 + (cy * TILE + 17) * sy);
+    ctx.lineTo(x0 + W, y0 + (cy * TILE + 17) * sy);
+    ctx.stroke();
+  }
+  const storeColors = { gun: '#ef765b', spray: '#ffcc58', clinic: '#76d6c1', safehouse: '#eeeeee' };
+  for (const s of state.world.stores) {
+    ctx.fillStyle = storeColors[s.type] || '#fff';
+    ctx.fillRect(x0 + s.x * sx - 2, y0 + s.y * sy - 2, 4, 4);
+  }
+  ctx.fillStyle = '#318df0';
+  for (const c of state.cars) {
+    if (c.police) ctx.fillRect(x0 + c.x * sx - 1.5, y0 + c.y * sy - 1.5, 3, 3);
+  }
+  ctx.fillStyle = '#9ec4ff';
+  for (const o of state.officers) {
+    if (!o.dead) ctx.fillRect(x0 + o.x * sx - 1.5, y0 + o.y * sy - 1.5, 3, 3);
+  }
+  if (state.marker) {
+    const pulse = 3 + Math.sin(state.time * 5) * 1.2;
+    ctx.fillStyle = '#ffd83d';
+    ctx.beginPath();
+    ctx.arc(x0 + state.marker.x * sx, y0 + state.marker.y * sy, pulse, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  const p = state.player.vehicle || state.player;
+  ctx.fillStyle = '#ffffff';
+  ctx.beginPath();
+  ctx.arc(x0 + p.x * sx, y0 + p.y * sy, 3, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.strokeStyle = '#111';
+  ctx.stroke();
+}
+
+export function drawHUD(ctx, state) {
+  syncDialog(state);
+  if (state.mode === 'title') return;
+  const p = state.player;
+  const W = ctx.canvas.width;
+  // health
+  ctx.fillStyle = 'rgba(10,16,20,.6)';
+  ctx.fillRect(14, 12, 188, 18);
+  ctx.fillStyle = p.hp > 30 ? '#69c24a' : '#e94651';
+  ctx.fillRect(16, 14, 184 * Math.max(0, p.hp / p.maxHp), 14);
+  ctx.strokeStyle = 'rgba(255,255,255,.4)';
+  ctx.strokeRect(14, 12, 188, 18);
+  ctx.fillStyle = '#fff';
+  ctx.font = 'bold 12px sans-serif';
+  ctx.fillText(`HP ${Math.ceil(p.hp)}`, 20, 25);
+  // money + ammo
+  ctx.font = 'bold 17px sans-serif';
+  ctx.fillStyle = '#ffd83d';
+  ctx.fillText(`$ ${p.money.toLocaleString('id-ID')}`, 16, 52);
+  if (p.hasPistol) {
+    ctx.fillStyle = '#e8e8e8';
+    ctx.font = 'bold 13px sans-serif';
+    ctx.fillText(`Pistol  ${p.mag} / ${p.ammo}${p.reloadT > 0 ? '  (reload…)' : ''}`, 16, 72);
+  }
+  // stars + clock
+  ctx.font = 'bold 20px sans-serif';
+  ctx.textAlign = 'right';
+  for (let i = 0; i < 5; i++) {
+    ctx.fillStyle = i < state.wanted.level ? '#ffd83d' : 'rgba(255,255,255,.25)';
+    ctx.fillText('★', W - 16 - (4 - i) * 22, 32);
+  }
+  const hh = Math.floor(state.timeOfDay) % 24;
+  const mm = Math.floor((state.timeOfDay % 1) * 60);
+  ctx.font = 'bold 14px sans-serif';
+  ctx.fillStyle = '#fff';
+  ctx.fillText(`${String(hh).padStart(2, '0')}:${String(mm).padStart(2, '0')} · ${phaseLabel(state.dayPhase)}`, W - 16, 56);
+  ctx.textAlign = 'left';
+  // bust meter
+  if (state.wanted.bust > 0.05) {
+    ctx.fillStyle = 'rgba(10,16,20,.6)';
+    ctx.fillRect(W - 166, 66, 150, 10);
+    ctx.fillStyle = '#e94651';
+    ctx.fillRect(W - 164, 68, 146 * Math.min(1, state.wanted.bust / 1.6), 6);
+  }
+  // objective
+  if (state.objective) {
+    ctx.font = 'bold 14px sans-serif';
+    const tw = ctx.measureText(state.objective).width;
+    const ox = (W - tw) / 2 - 12;
+    ctx.fillStyle = 'rgba(10,16,20,.62)';
+    ctx.fillRect(ox, 10, tw + 24, 26);
+    ctx.fillStyle = '#ffe9a8';
+    ctx.fillText(state.objective, ox + 12, 28);
+  }
+  // mission timer
+  if (state.missionTimer !== null && state.missionTimer !== undefined) {
+    ctx.font = 'bold 16px sans-serif';
+    ctx.fillStyle = state.missionTimer < 15 ? '#ff6b5e' : '#fff';
+    const t = `Sisa waktu: ${Math.ceil(state.missionTimer)} dtk`;
+    const tw = ctx.measureText(t).width;
+    ctx.fillText(t, (W - tw) / 2, 58);
+  }
+  // speed
+  if (p.vehicle) {
+    ctx.font = 'bold 26px sans-serif';
+    ctx.fillStyle = '#fff';
+    ctx.textAlign = 'right';
+    ctx.fillText(`${Math.round(Math.abs(p.vehicle.speed) * 0.36)} km/jam`, W - 16, ctx.canvas.height - 18);
+    ctx.textAlign = 'left';
+  }
+  // notices
+  ctx.font = 'bold 13px sans-serif';
+  let ny = 96;
+  for (const n of state.notices) {
+    const age = state.time - n.t;
+    ctx.globalAlpha = Math.max(0, 1 - age / 4.5);
+    ctx.fillStyle = '#fff';
+    ctx.fillText(n.text, 16, ny);
+    ny += 18;
+  }
+  ctx.globalAlpha = 1;
+  drawMinimap(ctx, state);
 }
